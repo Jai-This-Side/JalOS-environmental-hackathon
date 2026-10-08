@@ -1,0 +1,163 @@
+name: JalOS CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Run business logic checks
+        run: python -m unittest discover -s backend/app -v
+      - name: Verify a fresh SQLite database migrates
+        env:
+          DATABASE_URL: sqlite+pysqlite:///./jalos-ci.sqlite3
+        run: python -m alembic -c backend/alembic.ini upgrade head
+      - name: Verify an unversioned legacy SQLite database upgrades
+        run: python scripts/smoke_legacy_migration.py
+      - name: Import FastAPI and validate route models
+        env:
+          JWT_SECRET: ci-only-validation-secret-not-for-deployment
+        run: python -c "import sys; sys.path.insert(0, 'backend'); from app.main import app, MaintenanceInput; print(f'{len(app.routes)} FastAPI routes loaded')"
+      - name: Run local end-to-end API smoke flow
+        env:
+          DATABASE_URL: sqlite+pysqlite:////tmp/jalos-e2e.sqlite3
+          JWT_SECRET: ci-only-validation-secret-not-for-deployment
+          DEMO_ADMIN_EMAIL: admin@jalos.local
+          DEMO_ADMIN_PASSWORD: AdminDemo-2026!Change
+          DEMO_RESIDENT_EMAIL: resident@jalos.local
+          DEMO_RESIDENT_PASSWORD: ResidentDemo-2026!Change
+          JALOS_SIM_TICK_SECONDS: '0.5'
+        run: |
+          python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 > /tmp/jalos-api.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/api/v1/health/components > /dev/null; then break; fi
+            sleep 1
+          done
+          python scripts/smoke_local.py --base-url http://127.0.0.1:8000
+      - name: Parse backend source
+        run: python -c "import ast,pathlib; [ast.parse(p.read_text()) for p in pathlib.Path('backend/app').glob('*.py')]"
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile -t jalos-backend .
+
+  admin-web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run build
+
+  flutter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: flutter analyze --no-pub
+      - run: flutter test --no-pub
+      - run: flutter build apk --debug --no-pub
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.5
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false
+      - run: terraform validate
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AWS_ROLE_ARN != '' && vars.JALOS_S3_BUCKET != '' && vars.JALOS_INSTANCE_ID != '' && vars.JALOS_HEALTH_URL != ''
+    needs: [backend, admin-web, flutter, terraform]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-1' }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      JALOS_ENVIRONMENT: ${{ vars.JALOS_ENVIRONMENT || 'hackathon' }}
+      JALOS_S3_BUCKET: ${{ vars.JALOS_S3_BUCKET }}
+      JALOS_INSTANCE_ID: ${{ vars.JALOS_INSTANCE_ID }}
+      JALOS_HEALTH_URL: ${{ vars.JALOS_HEALTH_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-south-1' }}
+      - name: Build deployment images
+        run: |
+          docker build -f backend/Dockerfile -t "jalos-backend:${GITHUB_SHA}" .
+          docker build -f admin-web/Dockerfile -t "jalos-admin-web:${GITHUB_SHA}" admin-web
+          docker save "jalos-backend:${GITHUB_SHA}" | gzip -1 > /tmp/jalos-backend.tar.gz
+          docker save "jalos-admin-web:${GITHUB_SHA}" | gzip -1 > /tmp/jalos-admin-web.tar.gz
+      - name: Upload release to private S3 bucket
+        run: |
+          release="deploy/${JALOS_ENVIRONMENT}/${GITHUB_SHA}"
+          aws s3 cp /tmp/jalos-backend.tar.gz "s3://${JALOS_S3_BUCKET}/${release}/backend.tar.gz"
+          aws s3 cp /tmp/jalos-admin-web.tar.gz "s3://${JALOS_S3_BUCKET}/${release}/admin-web.tar.gz"
+          aws s3 cp docker-compose.production.yml "s3://${JALOS_S3_BUCKET}/${release}/docker-compose.production.yml"
+          model_name=$(python -c 'import json; print(json.load(open("ml/artifacts/water-demand-ridge-v1.json"))["model_name"])')
+          model_version=$(python -c 'import json; print(json.load(open("ml/artifacts/water-demand-ridge-v1.json"))["version"])')
+          model_key="models/${model_name}/${model_version}/water-demand-ridge-v1.json"
+          aws s3 cp ml/artifacts/water-demand-ridge-v1.json "s3://${JALOS_S3_BUCKET}/${model_key}"
+          aws s3 cp ml/artifacts/water-demand-ridge-v1.json "s3://${JALOS_S3_BUCKET}/${release}/forecast-model.json"
+      - name: Deploy over Systems Manager and verify health
+        run: |
+          python - "$GITHUB_SHA" > /tmp/jalos-ssm-parameters.json <<'PY'
+          import json, sys
+          with open('/tmp/jalos-ssm-parameters.json', 'w', encoding='utf-8') as f:
+              json.dump({'commands': [f'sudo /usr/local/sbin/jalos-deploy {sys.argv[1]}']}, f)
+          PY
+          command_id=$(aws ssm send-command \
+            --instance-ids "$JALOS_INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --parameters file:///tmp/jalos-ssm-parameters.json \
+            --comment "JalOS release ${GITHUB_SHA}" \
+            --query 'Command.CommandId' --output text)
+          status=''
+          for attempt in $(seq 1 36); do
+            status=$(aws ssm get-command-invocation --command-id "$command_id" --instance-id "$JALOS_INSTANCE_ID" --query Status --output text 2>/dev/null || true)
+            case "$status" in
+              Success) break ;;
+              Failed|Cancelled|TimedOut)
+                aws ssm get-command-invocation --command-id "$command_id" --instance-id "$JALOS_INSTANCE_ID" --query StandardErrorContent --output text || true
+                exit 1 ;;
+            esac
+            sleep 5
+          done
+          if [ "$status" != Success ]; then
+            echo "SSM deploy did not complete; last status: ${status:-not received}" >&2
+            exit 1
+          fi
+          curl --fail --silent --show-error --retry 8 --retry-delay 5 --retry-all-errors "${JALOS_HEALTH_URL%/}/health"
