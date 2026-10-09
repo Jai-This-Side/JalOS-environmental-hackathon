@@ -1,0 +1,88 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: jalos
+      POSTGRES_USER: jalos
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the private runtime environment}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jalos -d jalos"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [database]
+    logging: &cloudwatch_logging
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION:?Set AWS_REGION}
+        awslogs-group: ${CLOUDWATCH_LOG_GROUP:?Set CLOUDWATCH_LOG_GROUP}
+        awslogs-create-group: "false"
+        awslogs-stream: jalos-postgres
+
+  backend:
+    image: jalos-backend:${JALOS_IMAGE_TAG:?Set JALOS_IMAGE_TAG}
+    restart: unless-stopped
+    environment:
+      JALOS_ENV: production
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      DEMO_ADMIN_EMAIL: ${DEMO_ADMIN_EMAIL:?Set DEMO_ADMIN_EMAIL}
+      DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:?Set DEMO_ADMIN_PASSWORD}
+      DEMO_RESIDENT_EMAIL: ${DEMO_RESIDENT_EMAIL:?Set DEMO_RESIDENT_EMAIL}
+      DEMO_RESIDENT_PASSWORD: ${DEMO_RESIDENT_PASSWORD:?Set DEMO_RESIDENT_PASSWORD}
+      DATABASE_URL: postgresql+psycopg://jalos:${POSTGRES_PASSWORD}@postgres:5432/jalos
+      JALOS_UPLOAD_DIR: /data/uploads
+      JALOS_SIM_TICK_SECONDS: ${JALOS_SIM_TICK_SECONDS:-1}
+      JALOS_SIM_MINUTES_PER_TICK: ${JALOS_SIM_MINUTES_PER_TICK:-5}
+    volumes:
+      - uploads_data:/data/uploads
+      - /opt/jalos/models/water-demand-ridge-v1.json:/ml/artifacts/water-demand-ridge-v1.json:ro
+    expose: ["8000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    networks: [app, database]
+    logging:
+      <<: *cloudwatch_logging
+      options:
+        awslogs-region: ${AWS_REGION:?Set AWS_REGION}
+        awslogs-group: ${CLOUDWATCH_LOG_GROUP:?Set CLOUDWATCH_LOG_GROUP}
+        awslogs-create-group: "false"
+        awslogs-stream: jalos-backend
+
+  admin-web:
+    image: jalos-admin-web:${JALOS_IMAGE_TAG:?Set JALOS_IMAGE_TAG}
+    restart: unless-stopped
+    ports: ["80:80"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    networks: [app]
+    logging:
+      <<: *cloudwatch_logging
+      options:
+        awslogs-region: ${AWS_REGION:?Set AWS_REGION}
+        awslogs-group: ${CLOUDWATCH_LOG_GROUP:?Set CLOUDWATCH_LOG_GROUP}
+        awslogs-create-group: "false"
+        awslogs-stream: jalos-nginx
+
+volumes:
+  postgres_data:
+  uploads_data:
+
+networks:
+  app:
+  database:
+    internal: true

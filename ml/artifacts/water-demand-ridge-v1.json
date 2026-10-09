@@ -1,0 +1,75 @@
+{
+  "model_name": "jalos-seasonal-ridge",
+  "version": "1.0.0",
+  "artifact_path": "ml/artifacts/water-demand-ridge-v1.json",
+  "training_date": "2026-10-07T10:58:58.770081+00:00",
+  "dataset_version": "synthetic-society-15m-v1",
+  "dataset_rows": 17280,
+  "dataset_start": "2026-01-01T00:00:00+00:00",
+  "dataset_end": "2026-06-29T23:45:00+00:00",
+  "target": "society litres per hour estimated from 15-minute synthetic intervals",
+  "features": [
+    "intercept",
+    "synthetic household daily profile",
+    "profile x weekday business-period",
+    "profile x Apr-Jun season",
+    "profile x business-period x season"
+  ],
+  "feature_count": 5,
+  "ridge_penalty": 1.0,
+  "chronological_split": {
+    "method": "first 70% train, next 15% validation, last 15% test",
+    "train_rows": 12096,
+    "validation_rows": 2592,
+    "test_rows": 2592,
+    "validation_penalty_scores": {
+      "0.001": {
+        "mae_litres_per_hour": 47.195,
+        "rmse_litres_per_hour": 71.637,
+        "mape_percent": 0.662
+      },
+      "0.01": {
+        "mae_litres_per_hour": 47.195,
+        "rmse_litres_per_hour": 71.637,
+        "mape_percent": 0.662
+      },
+      "0.1": {
+        "mae_litres_per_hour": 47.194,
+        "rmse_litres_per_hour": 71.636,
+        "mape_percent": 0.662
+      },
+      "1.0": {
+        "mae_litres_per_hour": 47.188,
+        "rmse_litres_per_hour": 71.631,
+        "mape_percent": 0.661
+      }
+    }
+  },
+  "metrics": {
+    "mae_litres_per_hour": 43.09,
+    "rmse_litres_per_hour": 63.384,
+    "mape_percent": 0.622
+  },
+  "baselines": {
+    "seasonal_naive_previous_day": {
+      "definition": "Reuse the observed value from the same 15-minute slot on the previous day",
+      "validation_metrics": {
+        "mae_litres_per_hour": 189.562,
+        "rmse_litres_per_hour": 471.523,
+        "mape_percent": 2.768
+      },
+      "test_metrics": {
+        "mae_litres_per_hour": 185.811,
+        "rmse_litres_per_hour": 471.95,
+        "mape_percent": 2.746
+      }
+    }
+  },
+  "coefficients": [
+    0.2555078775585131,
+    4022.6983833005784,
+    770.1095186869018,
+    604.0787337998752,
+    111.89121882317698
+  ]
+}

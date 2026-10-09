@@ -1,0 +1,17 @@
+﻿.env
+.venv/
+__pycache__/
+*.py[cod]
+node_modules/
+dist/
+.dart_tool/
+.packages
+build/
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+terraform/*.tfvars
+*.tsbuildinfo
+.local/
+.idea/

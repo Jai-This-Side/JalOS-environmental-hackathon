@@ -1,0 +1,62 @@
+﻿services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: jalos
+      POSTGRES_USER: jalos
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jalos_local_only}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jalos -d jalos"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    networks: [internal]
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports: ["8000:8000"]
+    environment:
+      JALOS_ENV: development
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      DEMO_ADMIN_EMAIL: ${DEMO_ADMIN_EMAIL:?Set DEMO_ADMIN_EMAIL in .env}
+      DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:?Set DEMO_ADMIN_PASSWORD in .env}
+      DEMO_RESIDENT_EMAIL: ${DEMO_RESIDENT_EMAIL:?Set DEMO_RESIDENT_EMAIL in .env}
+      DEMO_RESIDENT_PASSWORD: ${DEMO_RESIDENT_PASSWORD:?Set DEMO_RESIDENT_PASSWORD in .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      DATABASE_URL: postgresql+psycopg://jalos:${POSTGRES_PASSWORD:-jalos_local_only}@postgres:5432/jalos
+      JALOS_UPLOAD_DIR: /data/uploads
+      JALOS_SIM_TICK_SECONDS: ${JALOS_SIM_TICK_SECONDS:-1}
+      JALOS_SIM_MINUTES_PER_TICK: ${JALOS_SIM_MINUTES_PER_TICK:-5}
+    volumes:
+      - uploads_data:/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    networks: [internal]
+  admin-web:
+    profiles: [web-preview]
+    image: node:22-alpine
+    working_dir: /workspace
+    volumes: ["./admin-web:/workspace"]
+    command: sh -c "npm ci && npm run dev"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000/api/v1
+      VITE_WEBSOCKET_URL: ws://localhost:8000/ws/societies/demo
+    ports: ["5173:5173"]
+    depends_on:
+      backend:
+        condition: service_healthy
+volumes:
+  postgres_data:
+  uploads_data:
+networks:
+  internal:
+    driver: bridge
