@@ -1,0 +1,1 @@
+{"commands":["sudo bash -n /usr/local/sbin/jalos-deploy \u0026\u0026 echo \u0027BASH_SYNTAX_OK\u0027","grep -nE \u0027docker-compose.production.yml|docker compose config|docker compose up|health\u0027 /usr/local/sbin/jalos-deploy"]}
