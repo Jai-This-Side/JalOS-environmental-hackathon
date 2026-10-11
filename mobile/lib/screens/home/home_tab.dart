@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants.dart';
@@ -6,11 +8,48 @@ import '../../providers/app_providers.dart';
 import '../../widgets/animated_tank.dart';
 import '../../widgets/metric_card.dart';
 
-class HomeTab extends ConsumerWidget {
+String _greetingForHour(int hour) {
+  if (hour < 12) return 'Good Morning';
+  if (hour < 17) return 'Good Afternoon';
+  return 'Good Evening';
+}
+
+class HomeTab extends ConsumerStatefulWidget {
   const HomeTab({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends ConsumerState<HomeTab> {
+  String _greeting = _greetingForHour(DateTime.now().hour);
+  Timer? _greetingTimer;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _greetingTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) {
+        final updatedGreeting =
+            _greetingForHour(DateTime.now().hour);
+
+        if (updatedGreeting != _greeting && mounted) {
+          setState(() => _greeting = updatedGreeting);
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _greetingTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final waterAsync = ref.watch(waterStatusProvider);
     final maintenanceAsync = ref.watch(maintenanceProvider);
 
@@ -22,9 +61,12 @@ class HomeTab extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
-          const Text(
-            'Good morning',
-            style: TextStyle(color: jalosMuted, fontSize: 13),
+          Text(
+            _greeting,
+            style: const TextStyle(
+              color: jalosMuted,
+              fontSize: 13,
+            ),
           ),
           const SizedBox(height: 2),
           const Text(
@@ -48,21 +90,26 @@ class HomeTab extends ConsumerWidget {
               child: metricCard(
                 child: Row(
                   children: [
-                    const Icon(Icons.cloud_off_rounded,
-                        color: jalosCriticalText),
+                    const Icon(
+                      Icons.cloud_off_rounded,
+                      color: jalosCriticalText,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'Unable to reach JalOS API. Verify the server is running.',
                         style: const TextStyle(
-                            color: jalosCriticalText, fontSize: 13),
+                          color: jalosCriticalText,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-            data: (water) => _buildContent(context, water, maintenanceAsync),
+            data: (water) =>
+                _buildContent(context, water, maintenanceAsync),
           ),
         ],
       ),
@@ -75,6 +122,7 @@ class HomeTab extends ConsumerWidget {
     AsyncValue<dynamic> maintenanceAsync,
   ) {
     final risk = water.runway.risk;
+
     final recommendation = water.recommendations.isNotEmpty
         ? water.recommendations.first
         : 'Water inventory is stable. Normal monitoring in effect.';
@@ -85,7 +133,10 @@ class HomeTab extends ConsumerWidget {
         if (water.syntheticPrototypeData)
           Container(
             margin: const EdgeInsets.only(top: 10, bottom: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 4,
+            ),
             decoration: BoxDecoration(
               color: jalosGreenLight,
               borderRadius: BorderRadius.circular(12),
@@ -93,7 +144,11 @@ class HomeTab extends ConsumerWidget {
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.science_outlined, size: 13, color: jalosGreen),
+                Icon(
+                  Icons.science_outlined,
+                  size: 13,
+                  color: jalosGreen,
+                ),
                 SizedBox(width: 5),
                 Text(
                   'DEMO · Synthetic prototype readings',
@@ -127,7 +182,10 @@ class HomeTab extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              AnimatedTank(level: water.levelPercent, risk: risk),
+              AnimatedTank(
+                level: water.levelPercent,
+                risk: risk,
+              ),
               const SizedBox(height: 8),
               Text(
                 '${water.levelPercent.toStringAsFixed(0)}%',
@@ -148,7 +206,10 @@ class HomeTab extends ConsumerWidget {
               const SizedBox(height: 6),
               Text(
                 'Usable inventory of ${water.capacityLitres.round()} L capacity',
-                style: const TextStyle(fontSize: 11, color: Color(0xFF9AA7A1)),
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF9AA7A1),
+                ),
               ),
             ],
           ),
@@ -170,7 +231,8 @@ class HomeTab extends ConsumerWidget {
                 label: 'Next Supply',
                 value: water.formattedTankerEta,
                 icon: Icons.local_shipping_outlined,
-                subtext: '${water.nextTankerQuantityLitres.round()} L tanker',
+                subtext:
+                    '${water.nextTankerQuantityLitres.round()} L tanker',
               ),
             ),
           ],
@@ -182,8 +244,11 @@ class HomeTab extends ConsumerWidget {
             children: [
               const Row(
                 children: [
-                  Icon(Icons.tips_and_updates_outlined,
-                      color: jalosGreen, size: 18),
+                  Icon(
+                    Icons.tips_and_updates_outlined,
+                    color: jalosGreen,
+                    size: 18,
+                  ),
                   SizedBox(width: 8),
                   Text(
                     'Operational Guidance',
@@ -207,7 +272,10 @@ class HomeTab extends ConsumerWidget {
               const SizedBox(height: 8),
               const Text(
                 'Your household consumption is private and not shared publicly.',
-                style: TextStyle(fontSize: 10, color: jalosMuted),
+                style: TextStyle(
+                  fontSize: 10,
+                  color: jalosMuted,
+                ),
               ),
             ],
           ),
@@ -218,7 +286,11 @@ class HomeTab extends ConsumerWidget {
                 .where((e) => e.status == 'SCHEDULED')
                 .take(2)
                 .toList();
-            if (scheduled.isEmpty) return const SizedBox.shrink();
+
+            if (scheduled.isEmpty) {
+              return const SizedBox.shrink();
+            }
+
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -233,10 +305,15 @@ class HomeTab extends ConsumerWidget {
                 ),
                 const SizedBox(height: 8),
                 ...scheduled.map((e) {
-                  final start = DateTime.tryParse(e.startTime)?.toLocal();
+                  final start =
+                      DateTime.tryParse(e.startTime)?.toLocal();
+
                   final when = start == null
                       ? 'Scheduled notice'
-                      : '${start.day}/${start.month} · ${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
+                      : '${start.day}/${start.month} · '
+                          '${start.hour.toString().padLeft(2, '0')}:'
+                          '${start.minute.toString().padLeft(2, '0')}';
+
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: metricCard(
@@ -249,8 +326,11 @@ class HomeTab extends ConsumerWidget {
                             color: jalosMint,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.build_outlined,
-                              color: jalosGreen, size: 20),
+                          child: const Icon(
+                            Icons.build_outlined,
+                            color: jalosGreen,
+                            size: 20,
+                          ),
                         ),
                         title: Text(
                           e.title,
@@ -263,7 +343,9 @@ class HomeTab extends ConsumerWidget {
                         subtitle: Text(
                           '$when · ${e.affectedTowers.isEmpty ? 'All towers' : e.affectedTowers.join(', ')}',
                           style: const TextStyle(
-                              fontSize: 11, color: jalosMuted),
+                            fontSize: 11,
+                            color: jalosMuted,
+                          ),
                         ),
                       ),
                     ),

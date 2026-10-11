@@ -1,0 +1,1 @@
+{"commands":["sudo docker ps --format \u0027table {{.Names}}\\t{{.Status}}\u0027","sudo docker compose -f /opt/jalos/docker-compose.production.yml ps"]}

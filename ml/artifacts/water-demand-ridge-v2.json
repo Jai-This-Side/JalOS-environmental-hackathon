@@ -1,0 +1,80 @@
+{
+  "model_name": "jalos-seasonal-ridge",
+  "version": "2.0.0",
+  "artifact_path": "ml/artifacts/water-demand-ridge-v2.json",
+  "training_date": "2026-10-11T07:59:26.226103+00:00",
+  "dataset_version": "synthetic-society-15m-v2",
+  "dataset_rows": 70176,
+  "dataset_start": "2024-01-01T00:00:00+00:00",
+  "dataset_end": "2025-12-31T23:45:00+00:00",
+  "target": "society litres per hour aggregated from 300 virtual household profiles at 15-minute intervals",
+  "generator_version": "aggregate-household-profiles-v2",
+  "aggregate_jitter_range": [
+    0.9873,
+    1.0127
+  ],
+  "features": [
+    "intercept",
+    "synthetic household daily profile",
+    "profile x weekday business-period",
+    "profile x Apr-Jun season",
+    "profile x business-period x season"
+  ],
+  "feature_count": 5,
+  "ridge_penalty": 1.0,
+  "chronological_split": {
+    "method": "first 70% train, next 15% validation, last 15% test",
+    "train_rows": 49123,
+    "validation_rows": 10526,
+    "test_rows": 10527,
+    "validation_penalty_scores": {
+      "0.001": {
+        "mae_litres_per_hour": 41.192,
+        "rmse_litres_per_hour": 56.557,
+        "mape_percent": 0.642
+      },
+      "0.01": {
+        "mae_litres_per_hour": 41.192,
+        "rmse_litres_per_hour": 56.557,
+        "mape_percent": 0.642
+      },
+      "0.1": {
+        "mae_litres_per_hour": 41.191,
+        "rmse_litres_per_hour": 56.557,
+        "mape_percent": 0.642
+      },
+      "1.0": {
+        "mae_litres_per_hour": 41.19,
+        "rmse_litres_per_hour": 56.555,
+        "mape_percent": 0.642
+      }
+    }
+  },
+  "metrics": {
+    "mae_litres_per_hour": 39.152,
+    "rmse_litres_per_hour": 53.75,
+    "mape_percent": 0.638
+  },
+  "baselines": {
+    "seasonal_naive_previous_day": {
+      "definition": "Reuse the observed value from the same 15-minute slot on the previous day",
+      "validation_metrics": {
+        "mae_litres_per_hour": 168.673,
+        "rmse_litres_per_hour": 430.026,
+        "mape_percent": 2.713
+      },
+      "test_metrics": {
+        "mae_litres_per_hour": 159.613,
+        "rmse_litres_per_hour": 405.901,
+        "mape_percent": 2.692
+      }
+    }
+  },
+  "coefficients": [
+    -0.06712048140916052,
+    4023.6010906672423,
+    769.7807474087638,
+    603.6225535868525,
+    115.46964040302957
+  ]
+}

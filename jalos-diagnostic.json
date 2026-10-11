@@ -1,0 +1,1 @@
+{"commands":["sudo docker inspect --format \u0027Health={{json .State.Health}}\u0027 jalos-admin-web-1","sudo docker logs --tail 60 jalos-admin-web-1 2\u003e\u00261","sudo docker inspect --format \u0027Healthcheck={{json .Config.Healthcheck}}\u0027 jalos-admin-web-1","sudo docker compose -f /opt/jalos/docker-compose.production.yml config --services"]}

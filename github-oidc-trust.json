@@ -1,0 +1,18 @@
+{
+    "Version":  "2012-10-17",
+    "Statement":  [
+                      {
+                          "Effect":  "Allow",
+                          "Principal":  {
+                                            "Federated":  "arn:aws:iam::949163302239:oidc-provider/token.actions.githubusercontent.com"
+                                        },
+                          "Condition":  {
+                                            "StringEquals":  {
+                                                                 "token.actions.githubusercontent.com:aud":  "sts.amazonaws.com",
+                                                                 "token.actions.githubusercontent.com:sub":  "repo:Jai-This-Side@130891128/JalOS-environmental-hackathon@1410677551:ref:refs/heads/main"
+                                                             }
+                                        },
+                          "Action":  "sts:AssumeRoleWithWebIdentity"
+                      }
+                  ]
+}
