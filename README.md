@@ -761,10 +761,6 @@ Update these contribution statements to reflect the team's actual division of wo
 
 ---
 
-## License and Attribution
-
-Add the project's chosen license and any required third-party notices before distributing the source publicly. No license is assumed by this README.
-
 ## Acknowledgement
 
 JalOS is a hackathon prototype exploring predictive water management for residential communities. All current demonstration data is synthetic unless explicitly stated otherwise.
